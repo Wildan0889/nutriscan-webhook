@@ -25,14 +25,47 @@ function generateActivationCode() {
 app.post('/mylink-webhook', (req, res) => {
     try {
         console.log('=== MYLINK WEBHOOK RECEIVED ===');
+        console.log('Headers:', req.headers);
         console.log('Body:', req.body);
         
-        const { order_id, customer_email, customer_name, product_name, amount, status, timestamp } = req.body;
+        // Handle different data formats from LYNK/MyLink
+        let orderData = req.body;
+        
+        // If data is nested, extract it
+        if (orderData.data) {
+            orderData = orderData.data;
+        }
+        
+        // Map different field names to standard format
+        const order_id = orderData.order_id || orderData.id || orderData.transaction_id || orderData.trx_id;
+        const customer_email = orderData.customer_email || orderData.email || orderData.buyer_email;
+        const customer_name = orderData.customer_name || orderData.name || orderData.buyer_name;
+        const product_name = orderData.product_name || orderData.product || orderData.item_name;
+        const amount = orderData.amount || orderData.total || orderData.price;
+        const status = orderData.status || orderData.state || orderData.order_status;
+        const timestamp = orderData.timestamp || orderData.created_at || orderData.date;
+        
+        console.log('Mapped data:', {
+            order_id,
+            customer_email,
+            customer_name,
+            product_name,
+            amount,
+            status,
+            timestamp
+        });
         
         if (!order_id || !customer_email || !customer_name) {
+            console.log('❌ Missing required fields:', {
+                order_id: !!order_id,
+                customer_email: !!customer_email,
+                customer_name: !!customer_name
+            });
             return res.status(400).json({
                 success: false,
-                error: 'Missing required fields'
+                error: 'Missing required fields',
+                received_fields: Object.keys(req.body),
+                required_fields: ['order_id', 'customer_email', 'customer_name']
             });
         }
         

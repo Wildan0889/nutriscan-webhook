@@ -31,19 +31,20 @@ app.post('/mylink-webhook', (req, res) => {
         // Handle different data formats from LYNK/MyLink
         let orderData = req.body;
         
-        // If data is nested, extract it
-        if (orderData.data) {
+        // LYNK sends data in { event: "...", data: {...} } format
+        if (orderData.data && typeof orderData.data === 'object') {
             orderData = orderData.data;
+            console.log('📦 Extracted data from LYNK format');
         }
         
         // Map different field names to standard format
-        const order_id = orderData.order_id || orderData.id || orderData.transaction_id || orderData.trx_id;
-        const customer_email = orderData.customer_email || orderData.email || orderData.buyer_email;
-        const customer_name = orderData.customer_name || orderData.name || orderData.buyer_name;
-        const product_name = orderData.product_name || orderData.product || orderData.item_name;
-        const amount = orderData.amount || orderData.total || orderData.price;
-        const status = orderData.status || orderData.state || orderData.order_status;
-        const timestamp = orderData.timestamp || orderData.created_at || orderData.date;
+        const order_id = orderData.order_id || orderData.id || orderData.transaction_id || orderData.trx_id || orderData.orderId;
+        const customer_email = orderData.customer_email || orderData.email || orderData.buyer_email || orderData.customerEmail;
+        const customer_name = orderData.customer_name || orderData.name || orderData.buyer_name || orderData.customerName;
+        const product_name = orderData.product_name || orderData.product || orderData.item_name || orderData.productName;
+        const amount = orderData.amount || orderData.total || orderData.price || orderData.totalAmount;
+        const status = orderData.status || orderData.state || orderData.order_status || orderData.orderStatus;
+        const timestamp = orderData.timestamp || orderData.created_at || orderData.date || orderData.createdAt;
         
         console.log('Mapped data:', {
             order_id,
@@ -54,6 +55,10 @@ app.post('/mylink-webhook', (req, res) => {
             status,
             timestamp
         });
+        
+        // Debug: Show what fields are available in the data
+        console.log('🔍 Available fields in data:', Object.keys(orderData));
+        console.log('🔍 Raw data object:', JSON.stringify(orderData, null, 2));
         
         if (!order_id || !customer_email || !customer_name) {
             console.log('❌ Missing required fields:', {
@@ -81,7 +86,6 @@ app.post('/mylink-webhook', (req, res) => {
         
         // Generate activation code
         const activationCode = generateActivationCode();
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         
         // Store order
         const order = {
@@ -91,115 +95,101 @@ app.post('/mylink-webhook', (req, res) => {
             product_name: product_name || 'NutriScan Premium - 1 Month',
             amount: amount || 25000,
             status: status || 'completed',
+            timestamp: timestamp || new Date().toISOString(),
             activation_code: activationCode,
-            created_at: new Date().toISOString(),
-            expires_at: expiresAt.toISOString(),
-            source: 'mylink_tiktok'
+            created_at: new Date().toISOString()
         };
         
         orders.push(order);
-        activationCodes.set(activationCode, {
-            email: customer_email,
-            name: customer_name,
-            order_id,
-            expires_at: expiresAt.toISOString(),
-            used: false
-        });
+        activationCodes.set(activationCode, order);
         
-        console.log(`✅ Order processed: ${order_id}`);
-        console.log(`📧 Customer: ${customer_email}`);
-        console.log(`🔑 Activation Code: ${activationCode}`);
+        console.log('✅ Order processed:', order_id);
+        console.log('📧 Customer:', customer_email);
+        console.log('🔑 Activation Code:', activationCode);
         
-        // Send notification (log for now)
-        console.log(`
-        ============================================
-        🎉 NUTRISCAN PREMIUM AKTIVASI
-        ============================================
+        // Simulate sending email (in production, use real email service)
+        console.log('📧 Sending activation code to', customer_email);
+        console.log('🔑 Activation Code:', activationCode);
+        console.log('        ============================================');
+        console.log('        🎉 NUTRISCAN PREMIUM AKTIVASI');
+        console.log('        ============================================');
+        console.log('        Halo', customer_name, '!');
+        console.log('        Terima kasih telah membeli NutriScan Premium melalui TikTok Shop');
+        console.log('        🔑 KODE AKTIVASI ANDA:', activationCode);
+        console.log('        📅 Berlaku hingga:', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('id-ID'));
+        console.log('        ');
+        console.log('        📱 Cara menggunakan NutriScan:');
+        console.log('        1. Buka aplikasi NutriScan');
+        console.log('        2. Masuk ke halaman Premium');
+        console.log('        3. Masukkan kode aktivasi:', activationCode);
+        console.log('        4. Nikmati fitur premium selama 1 bulan!');
+        console.log('        ❓ Butuh bantuan? Hubungi admin di WhatsApp');
+        console.log('        ============================================');
         
-        Halo ${customer_name}!
-        
-        Terima kasih telah membeli NutriScan Premium melalui TikTok Shop!
-        
-        🔑 KODE AKTIVASI ANDA: ${activationCode}
-        📅 Berlaku hingga: ${expiresAt.toLocaleDateString('id-ID')}
-        
-        📱 Cara menggunakan:
-        1. Buka aplikasi NutriScan
-        2. Masuk ke halaman Premium
-        3. Masukkan kode aktivasi: ${activationCode}
-        4. Nikmati fitur premium selama 1 bulan!
-        
-        ❓ Butuh bantuan? Hubungi admin di WhatsApp
-        
-        ============================================
-        `);
-        
+        // Return success response
         res.status(200).json({
             success: true,
             message: 'Order processed successfully',
-            order_id,
+            order_id: order_id,
             activation_code: activationCode,
-            expires_at: expiresAt.toISOString()
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         });
         
     } catch (error) {
-        console.error('Error processing MyLink webhook:', error);
+        console.error('❌ Webhook error:', error);
         res.status(500).json({
             success: false,
-            error: 'Internal server error'
+            error: 'Internal server error',
+            message: error.message
         });
     }
 });
 
-// Verify activation code endpoint
+// Activation Code Verification Endpoint
 app.post('/verify-activation', (req, res) => {
     try {
-        const { activation_code, user_email } = req.body;
+        const { activation_code } = req.body;
         
         if (!activation_code) {
             return res.status(400).json({
                 success: false,
-                error: 'Activation code required'
+                error: 'Activation code is required'
             });
         }
         
-        const codeData = activationCodes.get(activation_code);
+        const order = activationCodes.get(activation_code);
         
-        if (!codeData) {
+        if (!order) {
             return res.status(404).json({
                 success: false,
                 error: 'Invalid activation code'
             });
         }
         
-        if (codeData.used) {
+        // Check if code is expired (30 days)
+        const expiryDate = new Date(order.created_at);
+        expiryDate.setDate(expiryDate.getDate() + 30);
+        
+        if (new Date() > expiryDate) {
             return res.status(400).json({
                 success: false,
-                error: 'Activation code already used'
+                error: 'Activation code has expired'
             });
         }
-        
-        if (new Date(codeData.expires_at) < new Date()) {
-            return res.status(400).json({
-                success: false,
-                error: 'Activation code expired'
-            });
-        }
-        
-        // Mark as used
-        codeData.used = true;
-        codeData.used_at = new Date().toISOString();
-        codeData.user_email = user_email;
         
         res.status(200).json({
             success: true,
-            message: 'Activation successful',
-            expires_at: codeData.expires_at,
-            customer_name: codeData.name
+            message: 'Activation code is valid',
+            order: {
+                order_id: order.order_id,
+                customer_name: order.customer_name,
+                product_name: order.product_name,
+                expires_at: expiryDate.toISOString()
+            }
         });
         
     } catch (error) {
-        console.error('Error verifying activation:', error);
+        console.error('❌ Verification error:', error);
         res.status(500).json({
             success: false,
             error: 'Internal server error'
@@ -207,32 +197,41 @@ app.post('/verify-activation', (req, res) => {
     }
 });
 
-// Get orders endpoint
-app.get('/orders', (req, res) => {
-    try {
-        res.status(200).json({
-            success: true,
-            orders: orders,
-            total: orders.length
-        });
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error'
-        });
-    }
-});
-
-// Health check
+// Health Check Endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({
         success: true,
-        message: 'NutriScan MyLink Webhook Service is running',
+        message: 'Webhook service is running',
         timestamp: new Date().toISOString(),
         orders_count: orders.length,
-        active_codes: activationCodes.size,
-        environment: process.env.NODE_ENV || 'development'
+        activation_codes_count: activationCodes.size
+    });
+});
+
+// Get All Orders (for admin)
+app.get('/orders', (req, res) => {
+    res.status(200).json({
+        success: true,
+        orders: orders,
+        total: orders.length
+    });
+});
+
+// Get Order by ID
+app.get('/orders/:orderId', (req, res) => {
+    const orderId = req.params.orderId;
+    const order = orders.find(o => o.order_id === orderId);
+    
+    if (!order) {
+        return res.status(404).json({
+            success: false,
+            error: 'Order not found'
+        });
+    }
+    
+    res.status(200).json({
+        success: true,
+        order: order
     });
 });
 
@@ -245,8 +244,9 @@ app.get('/', (req, res) => {
         endpoints: {
             webhook: '/mylink-webhook',
             verify: '/verify-activation',
+            health: '/health',
             orders: '/orders',
-            health: '/health'
+            order_by_id: '/orders/:orderId'
         }
     });
 });
@@ -254,10 +254,9 @@ app.get('/', (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 NutriScan MyLink Webhook Service running on port ${PORT}`);
-    console.log(`📡 Webhook URL: http://localhost:${PORT}/mylink-webhook`);
-    console.log(`🔍 Health Check: http://localhost:${PORT}/health`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log('🚀 MyLink Webhook Service running on port', PORT);
+    console.log('📡 Webhook URL: http://localhost:' + PORT + '/mylink-webhook');
+    console.log('🔍 Health Check: http://localhost:' + PORT + '/health');
 });
 
 module.exports = app;
